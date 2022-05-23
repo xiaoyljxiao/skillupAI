@@ -796,8 +796,12 @@ class Dropout:
 
 
 class SimpleConvNet:
+#    def __init__(self, input_dim=(1, 28, 28), 
+#                 conv_param={'filter_num':30, 'filter_size':5, 'pad':0, 'stride':1},
+#                 pool_param={'pool_size':2, 'pad':0, 'stride':2},
+#                 hidden_size=100, output_size=15, weight_init_std=0.01):
     def __init__(self, input_dim=(1, 28, 28), 
-                 conv_param={'filter_num':30, 'filter_size':5, 'pad':0, 'stride':1},
+                 conv_param={'filter_num':20, 'filter_size':3, 'pad':0, 'stride':1},
                  pool_param={'pool_size':2, 'pad':0, 'stride':2},
                  hidden_size=100, output_size=15, weight_init_std=0.01):
         """
@@ -820,31 +824,41 @@ class SimpleConvNet:
         
         input_size = input_dim[1]
         conv_output_size = (input_size + 2*filter_pad - filter_size) // filter_stride + 1 # 畳み込み後のサイズ(H,W共通)
-        pool_output_size = (conv_output_size + 2*pool_pad - pool_size) // pool_stride + 1 # プーリング後のサイズ(H,W共通)
+        conv_output_size2 = (conv_output_size + 2*filter_pad - filter_size) // filter_stride + 1 # 畳み込み後のサイズ(H,W共通)
+        pool_output_size = (conv_output_size2 + 2*pool_pad - pool_size) // pool_stride + 1 # プーリング後のサイズ(H,W共通)
         pool_output_pixel = filter_num * pool_output_size * pool_output_size # プーリング後のピクセル総数
+
         
         # 重みの初期化
         self.params = {}
         std = weight_init_std
         #self.params['W1'] = std * np.random.randn(filter_num, input_dim[0], filter_size, filter_size) # W1は畳み込みフィルターの重みになる
-        self.params['W1'] = np.random.randn(filter_num, input_dim[0], filter_size, filter_size)  * np.sqrt(2 / input_size)# W1は畳み込みフィルターの重みになる
-        self.params['b1'] = np.zeros(filter_num) #b1は畳み込みフィルターのバイアスになる
-        #self.params['W2'] = std *  np.random.randn(pool_output_pixel, hidden_size)
-        self.params['W2'] = np.random.randn(pool_output_pixel, hidden_size) * np.sqrt(2 / hidden_size)
-        self.params['b2'] = np.zeros(hidden_size)
-        #self.params['W3'] = std *  np.random.randn(hidden_size, output_size)
-        self.params['W3'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / hidden_size)
-        self.params['b3'] = np.zeros(output_size)
+        self.params['W1'] = np.random.randn(filter_num, input_dim[0], filter_size, filter_size)  * np.sqrt(2 / input_size)# W1は畳み込みフィルター
+        self.params['b1'] = np.zeros(filter_num) #b1は畳み込みフィルターのバイアス
+        self.params['W2'] = np.random.randn(filter_num, filter_num, filter_size, filter_size)  * np.sqrt(2 / hidden_size)# 畳み込みフィルター
+        self.params['b2'] = np.zeros(filter_num) #b2は畳み込みフィルターのバイアス
+        
+        
+        
+        #self.params['W3'] = std *  np.random.randn(pool_output_pixel, hidden_size)
+        self.params['W3'] = np.random.randn(pool_output_pixel, hidden_size) * np.sqrt(2 / hidden_size)
+        self.params['b3'] = np.zeros(hidden_size)
+        #self.params['W4'] = std *  np.random.randn(hidden_size, output_size)
+        self.params['W4'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / hidden_size)
+        self.params['b4'] = np.zeros(output_size)
 
         # レイヤの生成
         self.layers = OrderedDict()
         self.layers['Conv1'] = Convolution(self.params['W1'], self.params['b1'],
                                            conv_param['stride'], conv_param['pad']) # W1が畳み込みフィルターの重み, b1が畳み込みフィルターのバイアスになる
         self.layers['ReLU1'] = ReLU()
-        self.layers['Pool1'] = MaxPooling(pool_h=pool_size, pool_w=pool_size, stride=pool_stride, pad=pool_pad)
-        self.layers['Affine1'] = Affine(self.params['W2'], self.params['b2'])
+        self.layers['Conv2'] = Convolution(self.params['W2'], self.params['b2'],
+                                           conv_param['stride'], conv_param['pad']) # W2が畳み込みフィルターの重み, b2
         self.layers['ReLU2'] = ReLU()
-        self.layers['Affine2'] = Affine(self.params['W3'], self.params['b3'])
+        self.layers['Pool1'] = MaxPooling(pool_h=pool_size, pool_w=pool_size, stride=pool_stride, pad=pool_pad)
+        self.layers['Affine1'] = Affine(self.params['W3'], self.params['b3'])
+        self.layers['ReLU2'] = ReLU()
+        self.layers['Affine2'] = Affine(self.params['W4'], self.params['b4'])
 
         self.last_layer = SoftmaxWithLoss()
 
@@ -904,8 +918,9 @@ class SimpleConvNet:
         # 設定
         grads = {}
         grads['W1'], grads['b1'] = self.layers['Conv1'].dW, self.layers['Conv1'].db
-        grads['W2'], grads['b2'] = self.layers['Affine1'].dW, self.layers['Affine1'].db
-        grads['W3'], grads['b3'] = self.layers['Affine2'].dW, self.layers['Affine2'].db
+        grads['W2'], grads['b2'] = self.layers['Conv2'].dW, self.layers['Conv2'].db
+        grads['W3'], grads['b3'] = self.layers['Affine1'].dW, self.layers['Affine1'].db
+        grads['W4'], grads['b4'] = self.layers['Affine2'].dW, self.layers['Affine2'].db
 
         return grads
     
