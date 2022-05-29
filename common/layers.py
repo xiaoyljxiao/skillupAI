@@ -158,117 +158,6 @@ def numerical_gradient(f, W):
         
     return grad
 
-
-#class TwoLayerNet:
-class ThreeLayerNet:
-
-    def __init__(self, input_size, hidden_size, output_size, weight_init_std = 0.01):
-        # 重みの初期化
-        self.params = {}
-        #self.params['W1'] = weight_init_std * np.random.randn(input_size, hidden_size)
-        self.params['W1'] = np.random.randn(input_size, hidden_size) * np.sqrt(2 / input_size)
-        self.params['b1'] = np.zeros(hidden_size)
-        #self.params['W2'] = weight_init_std * np.random.randn(hidden_size, hidden_size)
-        self.params['W2'] = np.random.randn(hidden_size, hidden_size) * np.sqrt(2 / hidden_size)
-        self.params['b2'] = np.zeros(hidden_size)
-        #self.params['W3'] = weight_init_std * np.random.randn(hidden_size, output_size) 
-        self.params['W3'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / hidden_size)
-        self.params['b3'] = np.zeros(output_size)
-
-        # レイヤの生成
-        self.layers = OrderedDict() # 順番付きdict形式. ただし、Python3.6以降は、普通のdictでもよい
-        self.layers['Affine1'] = Affine(self.params['W1'], self.params['b1'])
-        self.layers['Relu1'] = ReLU()
-        self.layers['Affine2'] = Affine(self.params['W2'], self.params['b2'])
-        self.layers['Relu2'] = ReLU()
-        self.layers['Affine3'] = Affine(self.params['W3'], self.params['b3'])
-        self.lastLayer = SoftmaxWithLoss() # 出力層
-        
-    def predict(self, x):
-        """
-        推論関数
-        x : 入力
-        """
-        for layer in self.layers.values():
-            # 入力されたxを更新していく = 順伝播計算
-            x = layer.forward(x)
-        
-        return x
-        
-    def loss(self, x, t):
-        """
-        損失関数
-        x:入力データ, t:教師データ
-        """
-        y = self.predict(x)
-        return self.lastLayer.forward(y, t)
-    
-    def accuracy(self, x, t):
-        """
-        識別精度
-        """
-        # 推論. 返り値は正規化されていない実数
-        y = self.predict(x)
-        #正規化されていない実数をもとに、最大値になるindexに変換する
-        y = np.argmax(y, axis=1)
-        
-        if t.ndim != 1 : 
-            """
-            one-hotベクトルの場合、教師データをindexに変換する
-            """
-            t = np.argmax(t, axis=1)
-        
-        # 精度
-        accuracy = np.sum(y == t) / float(x.shape[0])
-        return accuracy
-        
-    def gradient(self, x, t):
-        """
-        全パラメータの勾配を計算
-        """
-        
-        # 順伝播
-        self.loss(x, t)
-
-        # 逆伝播
-        dout = 1 # クロスエントロピー誤差を用いる場合は使用されない
-        dout = self.lastLayer.backward(dout=1) # 出力層
-        
-        ## doutを逆向きに伝える 
-        layers = list(self.layers.values())
-        layers.reverse()
-        for layer in layers:
-            dout = layer.backward(dout)
-
-        # dW, dbをgradsにまとめる
-        grads = {}
-        grads['W1'], grads['b1'] = self.layers['Affine1'].dW, self.layers['Affine1'].db
-        grads['W2'], grads['b2'] = self.layers['Affine2'].dW, self.layers['Affine2'].db
-        grads['W3'], grads['b3'] = self.layers['Affine3'].dW, self.layers['Affine3'].db
-
-        return grads
-    
-
-    def numerical_gradient(self, x, t):
-        """
-        勾配確認用
-        x:入力データ, t:教師データ        
-        """
-        
-        loss_W = lambda W: self.loss(x, t)
-
-        grads = {}
-        grads['W1'] = numerical_gradient(loss_W, self.params['W1'])
-        grads['b1'] = numerical_gradient(loss_W, self.params['b1'])
-        grads['W2'] = numerical_gradient(loss_W, self.params['W2'])
-        grads['b2'] = numerical_gradient(loss_W, self.params['b2'])
-        grads['W3'] = numerical_gradient(loss_W, self.params['W3'])
-        grads['b3'] = numerical_gradient(loss_W, self.params['b3'])
-
-        return grads
-
-    
-    
     
 class RMSProp:
     """
@@ -295,7 +184,7 @@ class RMSProp:
             self.h = {}
             for key, val in params.items():
                 self.h[key] = np.zeros_like(val)
-                                
+                
         for key in params.keys():
             self.h[key] = self.rho * self.h[key] + (1 - self.rho) * (grads[key] * grads[key])          
             params[key] -= self.lr * grads[key] / (np.sqrt(self.h[key] + self.epsilon) ) # 原著論文に合わせてepsilonをルートの中に入れる
@@ -422,191 +311,6 @@ class NesterovAG:
             #print(v_pre , self.v[key])
             params[key] += -self.momentum* v_pre + (self.momentum+1) * self.v[key]
 
-class MultiLayerNetExtend:
-    """拡張版の全結合による多層ニューラルネットワーク
-    
-    Weiht Decay、Dropout、Batch Normalizationの機能を持つ
-    Parameters
-    ----------
-    input_size : 入力サイズ（MNISTの場合は784）
-    hidden_size_list : 隠れ層のニューロンの数のリスト（e.g. [100, 100, 100]）
-    output_size : 出力サイズ（MNISTの場合は10）
-    activation : 'relu' or 'sigmoid'
-    weight_init_std : 重みの標準偏差を指定（e.g. 0.01）
-        'relu'または'he'を指定した場合は「Heの初期値」を設定
-        'sigmoid'または'xavier'を指定した場合は「Xavierの初期値」を設定
-    weight_decay_lambda : Weight Decay（L2ノルム）の強さ
-    use_dropout: Dropoutを使用するかどうか
-    dropout_ration : Dropoutの割り合い
-    use_batchNorm: Batch Normalizationを使用するかどうか
-    """
-    def __init__(self, input_size, hidden_size_list, output_size,
-                 activation='relu', weight_init_std='relu', weight_decay_lambda=0, 
-                 use_dropout = False, dropout_ration = 0.5, use_batchnorm=False):
-        self.input_size = input_size
-        self.output_size = output_size
-        self.hidden_size_list = hidden_size_list
-        self.hidden_layer_num = len(hidden_size_list)
-        self.use_dropout = use_dropout
-        self.weight_decay_lambda = weight_decay_lambda
-        self.use_batchnorm = use_batchnorm
-        self.params = {}
-
-        # 重みの初期化
-        self.__init_weight(weight_init_std)
-
-        # レイヤの生成
-        activation_layer = {'sigmoid': Sigmoid, 'relu': ReLU}
-        self.layers = OrderedDict()
-        for idx in range(1, self.hidden_layer_num+1):
-            self.layers['Affine' + str(idx)] = Affine(self.params['W' + str(idx)],
-                                                      self.params['b' + str(idx)])
-            if self.use_batchnorm:
-                self.params['gamma' + str(idx)] = np.ones(hidden_size_list[idx-1])
-                self.params['beta' + str(idx)] = np.zeros(hidden_size_list[idx-1])
-                self.layers['BatchNorm' + str(idx)] = BatchNormalization(self.params['gamma' + str(idx)], self.params['beta' + str(idx)])
-                
-            self.layers['Activation_function' + str(idx)] = activation_layer[activation]()
-            
-            if self.use_dropout:
-                self.layers['Dropout' + str(idx)] = Dropout(dropout_ration)
-
-        idx = self.hidden_layer_num + 1
-        self.layers['Affine' + str(idx)] = Affine(self.params['W' + str(idx)], self.params['b' + str(idx)])
-
-        self.last_layer = SoftmaxWithLoss()
-
-    def __init_weight(self, weight_init_std):
-        """重みの初期値設定
-        Parameters
-        ----------
-        weight_init_std : 重みの標準偏差を指定（e.g. 0.01）
-            'relu'または'he'を指定した場合は「Heの初期値」を設定
-            'sigmoid'または'xavier'を指定した場合は「Xavierの初期値」を設定
-        """
-        all_size_list = [self.input_size] + self.hidden_size_list + [self.output_size]
-        for idx in range(1, len(all_size_list)):
-            scale = weight_init_std
-            if str(weight_init_std).lower() in ('relu', 'he'):
-                scale = np.sqrt(2.0 / all_size_list[idx - 1])  # ReLUを使う場合に推奨される初期値
-            elif str(weight_init_std).lower() in ('sigmoid', 'xavier'):
-                scale = np.sqrt(1.0 / all_size_list[idx - 1])  # sigmoidを使う場合に推奨される初期値
-            self.params['W' + str(idx)] = scale * np.random.randn(all_size_list[idx-1], all_size_list[idx])
-            self.params['b' + str(idx)] = np.zeros(all_size_list[idx])
-
-    def predict(self, x, train_flg=False):
-        for key, layer in self.layers.items():
-            if "Dropout" in key or "BatchNorm" in key:
-                x = layer.forward(x, train_flg)
-            else:
-                x = layer.forward(x)
-
-        return x
-
-    def loss(self, x, t, train_flg=False):
-        """損失関数を求める
-        引数のxは入力データ、tは教師ラベル
-        """
-        y = self.predict(x, train_flg)
-
-        weight_decay = 0
-        for idx in range(1, self.hidden_layer_num + 2):
-            W = self.params['W' + str(idx)]
-            weight_decay += 0.5 * self.weight_decay_lambda * np.sum(W**2)
-
-        return self.last_layer.forward(y, t) + weight_decay
-
-    def accuracy(self, X, T):
-        Y = self.predict(X, train_flg=False)
-        Y = np.argmax(Y, axis=1)
-        if T.ndim != 1 : T = np.argmax(T, axis=1)    
-
-        accuracy = np.sum(Y == T) / float(X.shape[0])
-        return accuracy
-
-#↓分析用関数定義
-    def display_miss_img(self, X, T):
-        miss_summary = np.zeros(15)
-        
-        Y = self.predict(X, train_flg=False)
-        Y = np.argmax(Y, axis=1)
-        if T.ndim != 1 : T = np.argmax(T, axis=1) 
-        
-        for i in range(X.shape[0]):
-            if(Y[i] != T[i]):
-                img = X[i]
-                print("predict_label", onehot_to_str(Y[i]))
-                print("correct_label", onehot_to_str(T[i]))
-                img = img.reshape(28,28)
-                img = np.uint8(img*255)
-                #show_image(img)
-                
-                pil_img = Image.fromarray(img)
-                plt.imshow(pil_img)
-                plt.gray()
-                plt.show()
-                
-                miss_summary[T[i]] += 1
-
-        #結果表示
-        print("miss_summary\n")
-        for j in range(15):
-            print(onehot_to_str(j),miss_summary[j])
-            
-                
-#↑分析用関数定義
-    
-
-    def numerical_gradient(self, X, T):
-        """勾配を求める（数値微分）
-        Parameters
-        ----------
-        X : 入力データ
-        T : 教師ラベル
-        Returns
-        -------
-        各層の勾配を持ったディクショナリ変数
-            grads['W1']、grads['W2']、...は各層の重み
-            grads['b1']、grads['b2']、...は各層のバイアス
-        """
-        loss_W = lambda W: self.loss(X, T, train_flg=True)
-
-        grads = {}
-        for idx in range(1, self.hidden_layer_num+2):
-            grads['W' + str(idx)] = numerical_gradient(loss_W, self.params['W' + str(idx)])
-            grads['b' + str(idx)] = numerical_gradient(loss_W, self.params['b' + str(idx)])
-            
-            if self.use_batchnorm and idx != self.hidden_layer_num+1:
-                grads['gamma' + str(idx)] = numerical_gradient(loss_W, self.params['gamma' + str(idx)])
-                grads['beta' + str(idx)] = numerical_gradient(loss_W, self.params['beta' + str(idx)])
-
-        return grads
-        
-    def gradient(self, x, t):
-        # forward
-        self.loss(x, t, train_flg=True)
-
-        # backward
-        dout = 1
-        dout = self.last_layer.backward(dout)
-
-        layers = list(self.layers.values())
-        layers.reverse()
-        for layer in layers:
-            dout = layer.backward(dout)
-
-        # 設定
-        grads = {}
-        for idx in range(1, self.hidden_layer_num+2):
-            grads['W' + str(idx)] = self.layers['Affine' + str(idx)].dW + self.weight_decay_lambda * self.params['W' + str(idx)]
-            grads['b' + str(idx)] = self.layers['Affine' + str(idx)].db
-
-            if self.use_batchnorm and idx != self.hidden_layer_num+1:
-                grads['gamma' + str(idx)] = self.layers['BatchNorm' + str(idx)].dgamma
-                grads['beta' + str(idx)] = self.layers['BatchNorm' + str(idx)].dbeta
-
-        return grads
-
 class BatchNormalization:
     def __init__(self, gamma, beta, rho=0.9, moving_mean=None, moving_var=None):
         self.gamma = gamma # スケールさせるためのパラメータ, 学習によって更新させる.
@@ -690,7 +394,11 @@ class BatchNormalization:
             x_mu = x - self.moving_mean # n*d行列
             x_std = x_mu / np.sqrt(self.moving_var + epsilon) # n*d行列
             
-        # gammaでスケールし、betaでシフトさせる
+        # gammaでスケールし、betaでシフトさせる 
+        #print("self.gamma", self.gamma.shape)
+        #print("x_std", x_std.shape)
+        #print("self.beta", self.beta.shape)
+        #print("train_flg", train_flg)
         out = self.gamma * x_std + self.beta # n*d行列
         return out
 
@@ -698,7 +406,7 @@ class BatchNormalization:
         """
         逆伝播計算
         dout : CNNの場合は4次元、全結合層の場合は2次元  
-        """
+        """        
         if dout.ndim == 4:
             """
             画像形式の場合
@@ -762,7 +470,7 @@ class BatchNormalization:
 
 
 class Dropout:
-    def __init__(self, dropout_ratio=0.5):
+    def __init__(self, dropout_ratio=0.50):
         """
         dropout_ratio : ドロップアウトする割合
         """
@@ -796,14 +504,14 @@ class Dropout:
 
 
 class SimpleConvNet:
-#    def __init__(self, input_dim=(1, 28, 28), 
-#                 conv_param={'filter_num':30, 'filter_size':5, 'pad':0, 'stride':1},
-#                 pool_param={'pool_size':2, 'pad':0, 'stride':2},
-#                 hidden_size=100, output_size=15, weight_init_std=0.01):
-    def __init__(self, input_dim=(1, 28, 28), 
-                 conv_param={'filter_num':20, 'filter_size':3, 'pad':0, 'stride':1},
+    def __init__(self, batch_size, input_dim=(1, 28, 28), 
+                 conv_param={'filter_num':30, 'filter_size':5, 'pad':0, 'stride':1},
                  pool_param={'pool_size':2, 'pad':0, 'stride':2},
-                 hidden_size=100, output_size=15, weight_init_std=0.01):
+                 hidden_size=100, output_size=15, weight_init_std=0.01, weight_decay_lambda=0.01):
+#    def __init__(self, input_dim=(1, 28, 28), 
+#                 conv_param={'filter_num':20, 'filter_size':5, 'pad':0, 'stride':1},
+#                 pool_param={'pool_size':2, 'pad':0, 'stride':2},
+#                 hidden_size=100, output_size=15, weight_init_std=0.01, weight_decay_lambda=0.01):
         """
         input_size : tuple, 入力の配列形状(チャンネル数、画像の高さ、画像の幅)
         conv_param : dict, 畳み込みの条件
@@ -812,6 +520,7 @@ class SimpleConvNet:
         output_size : int, 出力層のノード数
         weight_init_std ： float, 重みWを初期化する際に用いる標準偏差
         """
+        self.weight_decay_lambda = weight_decay_lambda
                 
         filter_num = conv_param['filter_num']
         filter_size = conv_param['filter_size']
@@ -823,59 +532,84 @@ class SimpleConvNet:
         pool_stride = pool_param['stride']
         
         input_size = input_dim[1]
+        input_pixel = input_dim[0] * input_dim[1] * input_dim[2] 
+        
         conv_output_size = (input_size + 2*filter_pad - filter_size) // filter_stride + 1 # 畳み込み後のサイズ(H,W共通)
-        conv_output_size2 = (conv_output_size + 2*filter_pad - filter_size) // filter_stride + 1 # 畳み込み後のサイズ(H,W共通)
-        pool_output_size = (conv_output_size2 + 2*pool_pad - pool_size) // pool_stride + 1 # プーリング後のサイズ(H,W共通)
+        conv_output_pixel = filter_num * conv_output_size * conv_output_size
+        
+        #conv_output_size2 = (conv_output_size + 2*filter_pad - filter_size) // filter_stride + 1 # 畳み込み後のサイズ(H,W共通)
+        
+        pool_output_size = (conv_output_size + 2*pool_pad - pool_size) // pool_stride + 1 # プーリング後のサイズ(H,W共通)
         pool_output_pixel = filter_num * pool_output_size * pool_output_size # プーリング後のピクセル総数
 
         
         # 重みの初期化
         self.params = {}
         std = weight_init_std
-        #self.params['W1'] = std * np.random.randn(filter_num, input_dim[0], filter_size, filter_size) # W1は畳み込みフィルターの重みになる
-        self.params['W1'] = np.random.randn(filter_num, input_dim[0], filter_size, filter_size)  * np.sqrt(2 / input_size)# W1は畳み込みフィルター
+        
+        self.params['W1'] = np.random.randn(filter_num, input_dim[0], filter_size, filter_size)  * np.sqrt(2/input_pixel)# W1は畳み込みフィルター
         self.params['b1'] = np.zeros(filter_num) #b1は畳み込みフィルターのバイアス
-        self.params['W2'] = np.random.randn(filter_num, filter_num, filter_size, filter_size)  * np.sqrt(2 / hidden_size)# 畳み込みフィルター
-        self.params['b2'] = np.zeros(filter_num) #b2は畳み込みフィルターのバイアス
         
+        #バッチ正規化レイヤの重み
+        #self.params['gamma1'] = np.ones((batch_size*conv_output_size*conv_output_size, filter_num))
+        #self.params['beta1'] = np.zeros((batch_size*conv_output_size*conv_output_size, filter_num))
+        self.params['gamma1'] = np.ones(filter_num)
+        self.params['beta1'] = np.zeros(filter_num)
         
+        #W2,W3, b2,b3は全結合の重みとバイアス
+        self.params['W2'] = np.random.randn(pool_output_pixel, hidden_size) * np.sqrt(2 / pool_output_pixel)
+        self.params['b2'] = np.zeros(hidden_size)
+        self.params['W3'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / pool_output_pixel)
+        self.params['b3'] = np.zeros(output_size)
         
-        #self.params['W3'] = std *  np.random.randn(pool_output_pixel, hidden_size)
-        self.params['W3'] = np.random.randn(pool_output_pixel, hidden_size) * np.sqrt(2 / hidden_size)
-        self.params['b3'] = np.zeros(hidden_size)
-        #self.params['W4'] = std *  np.random.randn(hidden_size, output_size)
-        self.params['W4'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / hidden_size)
-        self.params['b4'] = np.zeros(output_size)
 
         # レイヤの生成
         self.layers = OrderedDict()
         self.layers['Conv1'] = Convolution(self.params['W1'], self.params['b1'],
-                                           conv_param['stride'], conv_param['pad']) # W1が畳み込みフィルターの重み, b1が畳み込みフィルターのバイアスになる
+                                           conv_param['stride'], conv_param['pad'])
+        #バッチ正規化レイヤ
+        self.layers['BatchNorm1'] = BatchNormalization(self.params['gamma1'], self.params['beta1'])
+        
+        #活性化関数        
         self.layers['ReLU1'] = ReLU()
-        self.layers['Conv2'] = Convolution(self.params['W2'], self.params['b2'],
-                                           conv_param['stride'], conv_param['pad']) # W2が畳み込みフィルターの重み, b2
+        self.layers['Pool1'] = MaxPooling(pool_h=pool_size, pool_w=pool_size, stride=pool_stride, pad=pool_pad)        
+        self.layers['Affine1'] = Affine(self.params['W2'], self.params['b2'])
         self.layers['ReLU2'] = ReLU()
-        self.layers['Pool1'] = MaxPooling(pool_h=pool_size, pool_w=pool_size, stride=pool_stride, pad=pool_pad)
-        self.layers['Affine1'] = Affine(self.params['W3'], self.params['b3'])
-        self.layers['ReLU2'] = ReLU()
-        self.layers['Affine2'] = Affine(self.params['W4'], self.params['b4'])
+        self.layers['DropOut'] = Dropout(dropout_ratio=0.5)
+        self.layers['Affine2'] = Affine(self.params['W3'], self.params['b3'])
 
         self.last_layer = SoftmaxWithLoss()
 
-    def predict(self, x):
-        for layer in self.layers.values():
-            x = layer.forward(x)
+#    def predict(self, x):
+#        for layer in self.layers.values():
+#            x = layer.forward(x)
+#
+#        return x
 
+    def predict(self, x, train_flg=False):
+        for key, layer in self.layers.items():
+            if "Dropout" in key or "BatchNorm" in key:
+                x = layer.forward(x, train_flg)
+            else:
+                x = layer.forward(x)
         return x
-
-    def loss(self, x, t):
+    
+    
+    
+    def loss(self, x, t, train_flg=False):
         """
         損失関数
         x : 入力データ
         t : 教師データ
         """
-        y = self.predict(x)
-        return self.last_layer.forward(y, t)
+        y = self.predict(x, train_flg)
+        
+        weight_decay = 0
+        for idx in range(1, 4):#TODO:W3なので1~4だが、自動で設定できるようにしたい
+            W = self.params['W' + str(idx)]
+            weight_decay += 0.5 * self.weight_decay_lambda * np.sum(W**2)
+
+        return self.last_layer.forward(y, t) + weight_decay
 
     def accuracy(self, x, t, batch_size=100):
         if t.ndim != 1 : t = np.argmax(t, axis=1)
@@ -904,7 +638,7 @@ class SimpleConvNet:
             grads['b1']、grads['b2']、...は各層のバイアス
         """
         # forward
-        self.loss(x, t)
+        self.loss(x, t, train_flg=True)
 
         # backward
         dout = 1
@@ -913,14 +647,18 @@ class SimpleConvNet:
         layers = list(self.layers.values())
         layers.reverse()
         for layer in layers:
+            #print(layer)
             dout = layer.backward(dout)
 
         # 設定
+        lmd = self.weight_decay_lambda
         grads = {}
-        grads['W1'], grads['b1'] = self.layers['Conv1'].dW, self.layers['Conv1'].db
-        grads['W2'], grads['b2'] = self.layers['Conv2'].dW, self.layers['Conv2'].db
-        grads['W3'], grads['b3'] = self.layers['Affine1'].dW, self.layers['Affine1'].db
-        grads['W4'], grads['b4'] = self.layers['Affine2'].dW, self.layers['Affine2'].db
+        grads['W1'], grads['b1'] = self.layers['Conv1'].dW + lmd * self.layers['Conv1'].W, self.layers['Conv1'].db
+        grads['gamma1'] = self.layers['BatchNorm1'].dgamma
+        grads['beta1'] = self.layers['BatchNorm1'].dbeta
+        
+        grads['W2'], grads['b2'] = self.layers['Affine1'].dW + lmd * self.layers['Affine1'].W, self.layers['Affine1'].db
+        grads['W3'], grads['b3'] = self.layers['Affine2'].dW + lmd * self.layers['Affine2'].W, self.layers['Affine2'].db
 
         return grads
     
