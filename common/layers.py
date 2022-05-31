@@ -598,11 +598,13 @@ class SimpleConvNet:
 
         self.last_layer = SoftmaxWithLoss()
 
-#    def predict(self, x):
-#        for layer in self.layers.values():
-#            x = layer.forward(x)
-#
-#        return x
+    #学習済みモデルのparamsを読み込んで各レイヤに再setするための関数
+    def setParamsAsLayers(self):
+        self.layers['Conv1'].W, self.layers['Conv1'].b = self.params['W1'], self.params['b1']
+        self.layers['Conv2'].W, self.layers['Conv2'].b = self.params['W2'], self.params['b2']
+        self.layers['BatchNorm1'].gamma, self.layers['BatchNorm1'].beta = self.params['gamma1'], self.params['beta1']
+        self.layers['Affine1'].W, self.layers['Affine1'].b = self.params['W3'], self.params['b3']
+        self.layers['Affine2'].W, self.layers['Affine2'].b = self.params['W4'], self.params['b4']   
 
     def predict(self, x, train_flg=False):
         for key, layer in self.layers.items():
