@@ -86,6 +86,10 @@ class Affine:
         self.original_x_shape = x.shape
         x = x.reshape(x.shape[0], -1)
         self.x = x
+        
+        #print("x", x.shape)
+        #print("self.original_x_shape", self.original_x_shape)
+        #print("W", self.W.shape)
 
         out = np.dot(self.x, self.W) + self.b
 
@@ -527,24 +531,28 @@ class SimpleConvNet:
         filter_pad = conv_param['pad']
         filter_stride = conv_param['stride']
         
-        filter_num2 = 16
+        filter_num2 = 32
         filter_size2 = 3
         filter_pad2 = 0
         filter_stride2 = 1
         
-        filter_num3 = 16
+        filter_num3 = 64
         filter_size3 = 3
         filter_pad3 = 0
         filter_stride3 = 1
         
-        filter_num4 = 16
+        filter_num4 = 64
         filter_size4 = 3
         filter_pad4 = 0
         filter_stride4 = 1
         
-        pool_size = pool_param['pool_size']
-        pool_pad = pool_param['pad']
-        pool_stride = pool_param['stride']
+        pool_size1 = pool_param['pool_size']
+        pool_pad1 = pool_param['pad']
+        pool_stride1 = pool_param['stride']
+        
+        pool_size2 = pool_param['pool_size']
+        pool_pad2 = pool_param['pad']
+        pool_stride2 = pool_param['stride']
         
         input_size = input_dim[1]
         input_pixel = input_dim[0] * input_dim[1] * input_dim[2] 
@@ -555,14 +563,23 @@ class SimpleConvNet:
         conv_output_size2 = (conv_output_size + 2*filter_pad2 - filter_size2) // filter_stride2 + 1 # 畳み込み後のサイズ(H,W共通)
         conv_output_pixel2 = filter_num2 * conv_output_size2 * conv_output_size2
         
-        conv_output_size3 = (conv_output_size2 + 2*filter_pad3 - filter_size3) // filter_stride3 + 1 # 畳み込み後のサイズ(H,W共通)
+        pool_output_size1 = (conv_output_size2 + 2*pool_pad1 - pool_size1) // pool_stride1 + 1 # プーリング後のサイズ(H,W共通)
+        pool_output_pixel1 = filter_num2 * pool_output_size1 * pool_output_size1 # プーリング後のピクセル総数
+        
+        conv_output_size3 = (pool_output_size1 + 2*filter_pad3 - filter_size3) // filter_stride3 + 1 # 畳み込み後のサイズ(H,W共通)
         conv_output_pixel3 = filter_num3 * conv_output_size3 * conv_output_size3
         
         conv_output_size4 = (conv_output_size3 + 2*filter_pad4 - filter_size4) // filter_stride4 + 1 # 畳み込み後のサイズ(H,W共通)
         conv_output_pixel4 = filter_num4 * conv_output_size4 * conv_output_size4
                 
-        pool_output_size = (conv_output_size4 + 2*pool_pad - pool_size) // pool_stride + 1 # プーリング後のサイズ(H,W共通)
-        pool_output_pixel = filter_num * pool_output_size * pool_output_size # プーリング後のピクセル総数
+        pool_output_size2 = (conv_output_size4 + 2*pool_pad2 - pool_size2) // pool_stride2 + 1 # プーリング後のサイズ(H,W共通)
+        pool_output_pixel2 = filter_num4 * pool_output_size2 * pool_output_size2 # プーリング後のピクセル総数
+        
+        #print("conv_output_size", conv_output_size)
+        #print("conv_output_size2", conv_output_size2)
+        #print("conv_output_size3", conv_output_size3)
+        #print("conv_output_size4", conv_output_size4)
+        #print("pool_output_size", pool_output_size)
 
         
         # 重みの初期化
@@ -575,7 +592,7 @@ class SimpleConvNet:
         self.params['W2'] = np.random.randn(filter_num2, filter_num, filter_size2, filter_size2)  * np.sqrt(2/conv_output_pixel)
         self.params['b2'] = np.zeros(filter_num2)
         
-        self.params['W3'] = np.random.randn(filter_num3, filter_num2, filter_size3, filter_size3)  * np.sqrt(2/conv_output_pixel2)
+        self.params['W3'] = np.random.randn(filter_num3, filter_num2, filter_size3, filter_size3)  * np.sqrt(2/pool_output_pixel1)
         self.params['b3'] = np.zeros(filter_num3)
         
         #畳み込み4層テスト
@@ -587,30 +604,33 @@ class SimpleConvNet:
         self.params['beta1'] = np.zeros(filter_num4)
         
         #全結合の重みとバイアス
-        self.params['W5'] = np.random.randn(pool_output_pixel, hidden_size) * np.sqrt(2 / pool_output_pixel)
+        self.params['W5'] = np.random.randn(pool_output_pixel2, hidden_size) * np.sqrt(2 / pool_output_pixel2)
         self.params['b5'] = np.zeros(hidden_size)
-        self.params['W6'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / pool_output_pixel)
+        self.params['W6'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / pool_output_pixel2)
         self.params['b6'] = np.zeros(output_size)
         
 
         # レイヤの生成
         self.layers = OrderedDict()
-        self.layers['Conv1'] = Convolution(self.params['W1'], self.params['b1'],
-                                           conv_param['stride'], conv_param['pad'])
-        self.layers['Conv2'] = Convolution(self.params['W2'], self.params['b2'],
-                                           conv_param['stride'], conv_param['pad'])
-        self.layers['Conv3'] = Convolution(self.params['W3'], self.params['b3'],
-                                           conv_param['stride'], conv_param['pad'])
-        self.layers['Conv4'] = Convolution(self.params['W4'], self.params['b4'],
-                                           conv_param['stride'], conv_param['pad'])
+        self.layers['Conv1'] = Convolution(self.params['W1'], self.params['b1'], conv_param['stride'], conv_param['pad'])
+        self.layers['ReLU1'] = ReLU()
+        
+        self.layers['Conv2'] = Convolution(self.params['W2'], self.params['b2'], conv_param['stride'], conv_param['pad'])
+        self.layers['ReLU2'] = ReLU()
+        
+        self.layers['Pool1'] = MaxPooling(pool_h=pool_size1, pool_w=pool_size1, stride=pool_stride1, pad=pool_pad1)     
+        
+        self.layers['Conv3'] = Convolution(self.params['W3'], self.params['b3'], conv_param['stride'], conv_param['pad'])
+        self.layers['ReLU3'] = ReLU()
+        
+        self.layers['Conv4'] = Convolution(self.params['W4'], self.params['b4'], conv_param['stride'], conv_param['pad'])
+        self.layers['ReLU4'] = ReLU()
         #バッチ正規化レイヤ
         self.layers['BatchNorm1'] = BatchNormalization(self.params['gamma1'], self.params['beta1'])
         
-        #活性化関数        
-        self.layers['ReLU1'] = ReLU()
-        self.layers['Pool1'] = MaxPooling(pool_h=pool_size, pool_w=pool_size, stride=pool_stride, pad=pool_pad)        
+        self.layers['Pool2'] = MaxPooling(pool_h=pool_size2, pool_w=pool_size2, stride=pool_stride2, pad=pool_pad2)        
         self.layers['Affine1'] = Affine(self.params['W5'], self.params['b5'])
-        self.layers['ReLU2'] = ReLU()
+        self.layers['ReLU5'] = ReLU()
         self.layers['DropOut'] = Dropout(dropout_ratio=0.5)
         self.layers['Affine2'] = Affine(self.params['W6'], self.params['b6'])
 
