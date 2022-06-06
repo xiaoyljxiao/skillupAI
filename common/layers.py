@@ -533,17 +533,17 @@ class SimpleConvNet:
         
         filter_num2 = 32
         filter_size2 = 3
-        filter_pad2 = 0
+        filter_pad2 = 1
         filter_stride2 = 1
         
         filter_num3 = 64
         filter_size3 = 3
-        filter_pad3 = 0
+        filter_pad3 = 1
         filter_stride3 = 1
         
         filter_num4 = 64
         filter_size4 = 3
-        filter_pad4 = 0
+        filter_pad4 = 1
         filter_stride4 = 1
         
         pool_size1 = pool_param['pool_size']
@@ -577,9 +577,10 @@ class SimpleConvNet:
         
         #print("conv_output_size", conv_output_size)
         #print("conv_output_size2", conv_output_size2)
+        #print("pool_output_size1", pool_output_size1)
         #print("conv_output_size3", conv_output_size3)
         #print("conv_output_size4", conv_output_size4)
-        #print("pool_output_size", pool_output_size)
+        #print("pool_output_size2", pool_output_size2)
 
         
         # 重みの初期化
@@ -606,8 +607,10 @@ class SimpleConvNet:
         #全結合の重みとバイアス
         self.params['W5'] = np.random.randn(pool_output_pixel2, hidden_size) * np.sqrt(2 / pool_output_pixel2)
         self.params['b5'] = np.zeros(hidden_size)
-        self.params['W6'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / pool_output_pixel2)
-        self.params['b6'] = np.zeros(output_size)
+        self.params['W6'] = np.random.randn(hidden_size, hidden_size) * np.sqrt(2 / hidden_size)
+        self.params['b6'] = np.zeros(hidden_size)
+        self.params['W7'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / hidden_size)
+        self.params['b7'] = np.zeros(output_size)
         
 
         # レイヤの生成
@@ -629,10 +632,12 @@ class SimpleConvNet:
         self.layers['BatchNorm1'] = BatchNormalization(self.params['gamma1'], self.params['beta1'])
         
         self.layers['Pool2'] = MaxPooling(pool_h=pool_size2, pool_w=pool_size2, stride=pool_stride2, pad=pool_pad2)        
+        self.layers['DropOut'] = Dropout(dropout_ratio=0.5)
         self.layers['Affine1'] = Affine(self.params['W5'], self.params['b5'])
         self.layers['ReLU5'] = ReLU()
-        self.layers['DropOut'] = Dropout(dropout_ratio=0.5)
         self.layers['Affine2'] = Affine(self.params['W6'], self.params['b6'])
+        self.layers['ReLU6'] = ReLU()
+        self.layers['Affine3'] = Affine(self.params['W7'], self.params['b7'])
 
         self.last_layer = SoftmaxWithLoss()
 
@@ -644,7 +649,8 @@ class SimpleConvNet:
         self.layers['Conv4'].W, self.layers['Conv4'].b = self.params['W4'], self.params['b4']
         self.layers['BatchNorm1'].gamma, self.layers['BatchNorm1'].beta = self.params['gamma1'], self.params['beta1']
         self.layers['Affine1'].W, self.layers['Affine1'].b = self.params['W5'], self.params['b5']
-        self.layers['Affine2'].W, self.layers['Affine2'].b = self.params['W6'], self.params['b6']   
+        self.layers['Affine2'].W, self.layers['Affine2'].b = self.params['W6'], self.params['b6']
+        self.layers['Affine3'].W, self.layers['Affine3'].b = self.params['W7'], self.params['b7']
 
     def predict(self, x, train_flg=False):
         for key, layer in self.layers.items():
@@ -666,7 +672,7 @@ class SimpleConvNet:
         y = self.predict(x, train_flg)
         
         weight_decay = 0
-        for idx in range(1, 4):#TODO:W3なので1~4だが、自動で設定できるようにしたい
+        for idx in range(1, 8):#TODO:W7なので1~8だが、自動で設定できるようにしたい
             W = self.params['W' + str(idx)]
             weight_decay += 0.5 * self.weight_decay_lambda * np.sum(W**2)
 
@@ -723,6 +729,7 @@ class SimpleConvNet:
         
         grads['W5'], grads['b5'] = self.layers['Affine1'].dW + lmd * self.layers['Affine1'].W, self.layers['Affine1'].db
         grads['W6'], grads['b6'] = self.layers['Affine2'].dW + lmd * self.layers['Affine2'].W, self.layers['Affine2'].db
+        grads['W7'], grads['b7'] = self.layers['Affine3'].dW + lmd * self.layers['Affine3'].W, self.layers['Affine3'].db        
 
         return grads
     
