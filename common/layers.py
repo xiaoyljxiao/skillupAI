@@ -524,6 +524,10 @@ class SimpleConvNet:
         output_size : int, 出力層のノード数
         weight_init_std ： float, 重みWを初期化する際に用いる標準偏差
         """
+        self.convLayerNum = 4
+        self.affineLayerNum = 3
+        self.bnLayerNum = 2
+        
         self.weight_decay_lambda = weight_decay_lambda
                 
         filter_num = conv_param['filter_num']
@@ -587,70 +591,78 @@ class SimpleConvNet:
         self.params = {}
         std = weight_init_std
         
-        self.params['W1'] = np.random.randn(filter_num, input_dim[0], filter_size, filter_size)  * np.sqrt(2/input_pixel)# W1は畳み込みフィルター
-        self.params['b1'] = np.zeros(filter_num) #b1は畳み込みフィルターのバイアス
+        self.params['CW1'] = np.random.randn(filter_num, input_dim[0], filter_size, filter_size)  * np.sqrt(2/input_pixel)# CW1は畳み込みフィルター
+        self.params['Cb1'] = np.zeros(filter_num) #b1は畳み込みフィルターのバイアス
         
-        self.params['W2'] = np.random.randn(filter_num2, filter_num, filter_size2, filter_size2)  * np.sqrt(2/conv_output_pixel)
-        self.params['b2'] = np.zeros(filter_num2)
-        
-        self.params['W3'] = np.random.randn(filter_num3, filter_num2, filter_size3, filter_size3)  * np.sqrt(2/pool_output_pixel1)
-        self.params['b3'] = np.zeros(filter_num3)
-        
-        #畳み込み4層テスト
-        self.params['W4'] = np.random.randn(filter_num4, filter_num3, filter_size4, filter_size4)  * np.sqrt(2/conv_output_pixel3)
-        self.params['b4'] = np.zeros(filter_num4)
+        self.params['CW2'] = np.random.randn(filter_num2, filter_num, filter_size2, filter_size2)  * np.sqrt(2/conv_output_pixel)
+        self.params['Cb2'] = np.zeros(filter_num2)
         
         #バッチ正規化レイヤの重み
-        self.params['gamma1'] = np.ones(filter_num4)
-        self.params['beta1'] = np.zeros(filter_num4)
+        self.params['gamma1'] = np.ones(filter_num2)
+        self.params['beta1'] = np.zeros(filter_num2)
+        
+        self.params['CW3'] = np.random.randn(filter_num3, filter_num2, filter_size3, filter_size3)  * np.sqrt(2/pool_output_pixel1)
+        self.params['Cb3'] = np.zeros(filter_num3)
+        
+        self.params['CW4'] = np.random.randn(filter_num4, filter_num3, filter_size4, filter_size4)  * np.sqrt(2/conv_output_pixel3)
+        self.params['Cb4'] = np.zeros(filter_num4)
+        
+        #バッチ正規化レイヤの重み
+        self.params['gamma2'] = np.ones(filter_num4)
+        self.params['beta2'] = np.zeros(filter_num4)
         
         #全結合の重みとバイアス
-        self.params['W5'] = np.random.randn(pool_output_pixel2, hidden_size) * np.sqrt(2 / pool_output_pixel2)
-        self.params['b5'] = np.zeros(hidden_size)
-        self.params['W6'] = np.random.randn(hidden_size, hidden_size) * np.sqrt(2 / hidden_size)
-        self.params['b6'] = np.zeros(hidden_size)
-        self.params['W7'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / hidden_size)
-        self.params['b7'] = np.zeros(output_size)
+        self.params['AW1'] = np.random.randn(pool_output_pixel2, hidden_size) * np.sqrt(2 / pool_output_pixel2)
+        self.params['Ab1'] = np.zeros(hidden_size)
+        self.params['AW2'] = np.random.randn(hidden_size, hidden_size) * np.sqrt(2 / hidden_size)
+        self.params['Ab2'] = np.zeros(hidden_size)
+        self.params['AW3'] = np.random.randn(hidden_size, output_size) * np.sqrt(2 / hidden_size)
+        self.params['Ab3'] = np.zeros(output_size)
         
 
         # レイヤの生成
         self.layers = OrderedDict()
-        self.layers['Conv1'] = Convolution(self.params['W1'], self.params['b1'], conv_param['stride'], conv_param['pad'])
+        self.layers['Conv1'] = Convolution(self.params['CW1'], self.params['Cb1'], conv_param['stride'], conv_param['pad'])
         self.layers['ReLU1'] = ReLU()
         
-        self.layers['Conv2'] = Convolution(self.params['W2'], self.params['b2'], conv_param['stride'], conv_param['pad'])
+        self.layers['Conv2'] = Convolution(self.params['CW2'], self.params['Cb2'], conv_param['stride'], conv_param['pad'])
         self.layers['ReLU2'] = ReLU()
         
-        self.layers['Pool1'] = MaxPooling(pool_h=pool_size1, pool_w=pool_size1, stride=pool_stride1, pad=pool_pad1)     
-        
-        self.layers['Conv3'] = Convolution(self.params['W3'], self.params['b3'], conv_param['stride'], conv_param['pad'])
-        self.layers['ReLU3'] = ReLU()
-        
-        self.layers['Conv4'] = Convolution(self.params['W4'], self.params['b4'], conv_param['stride'], conv_param['pad'])
-        self.layers['ReLU4'] = ReLU()
         #バッチ正規化レイヤ
         self.layers['BatchNorm1'] = BatchNormalization(self.params['gamma1'], self.params['beta1'])
         
+        self.layers['Pool1'] = MaxPooling(pool_h=pool_size1, pool_w=pool_size1, stride=pool_stride1, pad=pool_pad1)     
+        
+        self.layers['Conv3'] = Convolution(self.params['CW3'], self.params['Cb3'], conv_param['stride'], conv_param['pad'])
+        self.layers['ReLU3'] = ReLU()
+        
+        self.layers['Conv4'] = Convolution(self.params['CW4'], self.params['Cb4'], conv_param['stride'], conv_param['pad'])
+        self.layers['ReLU4'] = ReLU()
+        #バッチ正規化レイヤ
+        self.layers['BatchNorm2'] = BatchNormalization(self.params['gamma2'], self.params['beta2'])
+        
         self.layers['Pool2'] = MaxPooling(pool_h=pool_size2, pool_w=pool_size2, stride=pool_stride2, pad=pool_pad2)        
-        self.layers['DropOut'] = Dropout(dropout_ratio=0.5)
-        self.layers['Affine1'] = Affine(self.params['W5'], self.params['b5'])
+        
+        self.layers['Affine1'] = Affine(self.params['AW1'], self.params['Ab1'])
         self.layers['ReLU5'] = ReLU()
-        self.layers['Affine2'] = Affine(self.params['W6'], self.params['b6'])
+        self.layers['Affine2'] = Affine(self.params['AW2'], self.params['Ab2'])
         self.layers['ReLU6'] = ReLU()
-        self.layers['Affine3'] = Affine(self.params['W7'], self.params['b7'])
-
+        self.layers['DropOut'] = Dropout(dropout_ratio=0.5)
+        
+        self.layers['Affine3'] = Affine(self.params['AW3'], self.params['Ab3'])
         self.last_layer = SoftmaxWithLoss()
 
     #学習済みモデルのparamsを読み込んで各レイヤに再setするための関数
     def setParamsAsLayers(self):
-        self.layers['Conv1'].W, self.layers['Conv1'].b = self.params['W1'], self.params['b1']
-        self.layers['Conv2'].W, self.layers['Conv2'].b = self.params['W2'], self.params['b2']
-        self.layers['Conv3'].W, self.layers['Conv3'].b = self.params['W3'], self.params['b3']
-        self.layers['Conv4'].W, self.layers['Conv4'].b = self.params['W4'], self.params['b4']
+        self.layers['Conv1'].W, self.layers['Conv1'].b = self.params['CW1'], self.params['Cb1']
+        self.layers['Conv2'].W, self.layers['Conv2'].b = self.params['CW2'], self.params['Cb2']
+        self.layers['Conv3'].W, self.layers['Conv3'].b = self.params['CW3'], self.params['Cb3']
+        self.layers['Conv4'].W, self.layers['Conv4'].b = self.params['CW4'], self.params['Cb4']
         self.layers['BatchNorm1'].gamma, self.layers['BatchNorm1'].beta = self.params['gamma1'], self.params['beta1']
-        self.layers['Affine1'].W, self.layers['Affine1'].b = self.params['W5'], self.params['b5']
-        self.layers['Affine2'].W, self.layers['Affine2'].b = self.params['W6'], self.params['b6']
-        self.layers['Affine3'].W, self.layers['Affine3'].b = self.params['W7'], self.params['b7']
+        self.layers['BatchNorm2'].gamma, self.layers['BatchNorm2'].beta = self.params['gamma2'], self.params['beta2']
+        self.layers['Affine1'].W, self.layers['Affine1'].b = self.params['AW1'], self.params['Ab1']
+        self.layers['Affine2'].W, self.layers['Affine2'].b = self.params['AW2'], self.params['Ab2']
+        self.layers['Affine3'].W, self.layers['Affine3'].b = self.params['AW3'], self.params['Ab3']
 
     def predict(self, x, train_flg=False):
         for key, layer in self.layers.items():
@@ -672,9 +684,13 @@ class SimpleConvNet:
         y = self.predict(x, train_flg)
         
         weight_decay = 0
-        for idx in range(1, 8):#TODO:W7なので1~8だが、自動で設定できるようにしたい
-            W = self.params['W' + str(idx)]
-            weight_decay += 0.5 * self.weight_decay_lambda * np.sum(W**2)
+        for idx in range(1, self.convLayerNum+1):
+            CW = self.params['CW' + str(idx)]
+            weight_decay += 0.5 * self.weight_decay_lambda * np.sum(CW**2)
+        
+        for idx in range(1, self.affineLayerNum+1):
+            AW = self.params['AW' + str(idx)]
+            weight_decay += 0.5 * self.weight_decay_lambda * np.sum(AW**2)
 
         return self.last_layer.forward(y, t) + weight_decay
 
@@ -701,7 +717,7 @@ class SimpleConvNet:
         Returns
         -------
         各層の勾配を持ったディクショナリ変数
-            grads['W1']、grads['W2']、...は各層の重み
+            grads['CW1']、grads['W2']、...は各層の重み
             grads['b1']、grads['b2']、...は各層のバイアス
         """
         # forward
@@ -720,16 +736,17 @@ class SimpleConvNet:
         # 設定
         lmd = self.weight_decay_lambda
         grads = {}
-        grads['W1'], grads['b1'] = self.layers['Conv1'].dW + lmd * self.layers['Conv1'].W, self.layers['Conv1'].db
-        grads['W2'], grads['b2'] = self.layers['Conv2'].dW + lmd * self.layers['Conv2'].W, self.layers['Conv2'].db
-        grads['W3'], grads['b3'] = self.layers['Conv3'].dW + lmd * self.layers['Conv3'].W, self.layers['Conv3'].db
-        grads['W4'], grads['b4'] = self.layers['Conv4'].dW + lmd * self.layers['Conv4'].W, self.layers['Conv4'].db
-        grads['gamma1'] = self.layers['BatchNorm1'].dgamma
-        grads['beta1'] = self.layers['BatchNorm1'].dbeta
+        grads['CW1'], grads['Cb1'] = self.layers['Conv1'].dW + lmd * self.layers['Conv1'].W, self.layers['Conv1'].db
+        grads['CW2'], grads['Cb2'] = self.layers['Conv2'].dW + lmd * self.layers['Conv2'].W, self.layers['Conv2'].db
+        grads['gamma1'], grads['beta1'] = self.layers['BatchNorm1'].dgamma, self.layers['BatchNorm1'].dbeta
         
-        grads['W5'], grads['b5'] = self.layers['Affine1'].dW + lmd * self.layers['Affine1'].W, self.layers['Affine1'].db
-        grads['W6'], grads['b6'] = self.layers['Affine2'].dW + lmd * self.layers['Affine2'].W, self.layers['Affine2'].db
-        grads['W7'], grads['b7'] = self.layers['Affine3'].dW + lmd * self.layers['Affine3'].W, self.layers['Affine3'].db        
+        grads['CW3'], grads['Cb3'] = self.layers['Conv3'].dW + lmd * self.layers['Conv3'].W, self.layers['Conv3'].db
+        grads['CW4'], grads['Cb4'] = self.layers['Conv4'].dW + lmd * self.layers['Conv4'].W, self.layers['Conv4'].db
+        grads['gamma2'], grads['beta2'] = self.layers['BatchNorm2'].dgamma, self.layers['BatchNorm2'].dbeta
+        
+        grads['AW1'], grads['Ab1'] = self.layers['Affine1'].dW + lmd * self.layers['Affine1'].W, self.layers['Affine1'].db
+        grads['AW2'], grads['Ab2'] = self.layers['Affine2'].dW + lmd * self.layers['Affine2'].W, self.layers['Affine2'].db
+        grads['AW3'], grads['Ab3'] = self.layers['Affine3'].dW + lmd * self.layers['Affine3'].W, self.layers['Affine3'].db        
 
         return grads
     
