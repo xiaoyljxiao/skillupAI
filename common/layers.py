@@ -524,7 +524,7 @@ class SimpleConvNet:
         output_size : int, 出力層のノード数
         weight_init_std ： float, 重みWを初期化する際に用いる標準偏差
         """
-        self.convLayerNum = 4
+        self.convLayerNum = 5
         self.affineLayerNum = 3
         self.bnLayerNum = 2
         
@@ -549,6 +549,11 @@ class SimpleConvNet:
         filter_size4 = 3
         filter_pad4 = 1
         filter_stride4 = 1
+        
+        filter_num5 = 64
+        filter_size5 = 3
+        filter_pad5 = 1
+        filter_stride5 = 1
         
         pool_size1 = pool_param['pool_size']
         pool_pad1 = pool_param['pad']
@@ -575,9 +580,12 @@ class SimpleConvNet:
         
         conv_output_size4 = (conv_output_size3 + 2*filter_pad4 - filter_size4) // filter_stride4 + 1 # 畳み込み後のサイズ(H,W共通)
         conv_output_pixel4 = filter_num4 * conv_output_size4 * conv_output_size4
+        
+        conv_output_size5 = (conv_output_size4 + 2*filter_pad5 - filter_size5) // filter_stride5 + 1 # 畳み込み後のサイズ(H,W共通)
+        conv_output_pixel5 = filter_num5 * conv_output_size5 * conv_output_size5
                 
-        pool_output_size2 = (conv_output_size4 + 2*pool_pad2 - pool_size2) // pool_stride2 + 1 # プーリング後のサイズ(H,W共通)
-        pool_output_pixel2 = filter_num4 * pool_output_size2 * pool_output_size2 # プーリング後のピクセル総数
+        pool_output_size2 = (conv_output_size5 + 2*pool_pad2 - pool_size2) // pool_stride2 + 1 # プーリング後のサイズ(H,W共通)
+        pool_output_pixel2 = filter_num5 * pool_output_size2 * pool_output_size2 # プーリング後のピクセル総数
         
         #print("conv_output_size", conv_output_size)
         #print("conv_output_size2", conv_output_size2)
@@ -607,9 +615,12 @@ class SimpleConvNet:
         self.params['CW4'] = np.random.randn(filter_num4, filter_num3, filter_size4, filter_size4)  * np.sqrt(2/conv_output_pixel3)
         self.params['Cb4'] = np.zeros(filter_num4)
         
+        self.params['CW5'] = np.random.randn(filter_num5, filter_num4, filter_size5, filter_size5)  * np.sqrt(2/conv_output_pixel4)
+        self.params['Cb5'] = np.zeros(filter_num5)
+        
         #バッチ正規化レイヤの重み
-        self.params['gamma2'] = np.ones(filter_num4)
-        self.params['beta2'] = np.zeros(filter_num4)
+        self.params['gamma2'] = np.ones(filter_num5)
+        self.params['beta2'] = np.zeros(filter_num5)
         
         #全結合の重みとバイアス
         self.params['AW1'] = np.random.randn(pool_output_pixel2, hidden_size) * np.sqrt(2 / pool_output_pixel2)
@@ -638,6 +649,10 @@ class SimpleConvNet:
         
         self.layers['Conv4'] = Convolution(self.params['CW4'], self.params['Cb4'], conv_param['stride'], conv_param['pad'])
         self.layers['ReLU4'] = ReLU()
+        
+        self.layers['Conv5'] = Convolution(self.params['CW5'], self.params['Cb5'], conv_param['stride'], conv_param['pad'])
+        self.layers['ReLU5'] = ReLU()
+        
         #バッチ正規化レイヤ
         self.layers['BatchNorm2'] = BatchNormalization(self.params['gamma2'], self.params['beta2'])
         
@@ -654,15 +669,14 @@ class SimpleConvNet:
 
     #学習済みモデルのparamsを読み込んで各レイヤに再setするための関数
     def setParamsAsLayers(self):
-        self.layers['Conv1'].W, self.layers['Conv1'].b = self.params['CW1'], self.params['Cb1']
-        self.layers['Conv2'].W, self.layers['Conv2'].b = self.params['CW2'], self.params['Cb2']
-        self.layers['Conv3'].W, self.layers['Conv3'].b = self.params['CW3'], self.params['Cb3']
-        self.layers['Conv4'].W, self.layers['Conv4'].b = self.params['CW4'], self.params['Cb4']
-        self.layers['BatchNorm1'].gamma, self.layers['BatchNorm1'].beta = self.params['gamma1'], self.params['beta1']
-        self.layers['BatchNorm2'].gamma, self.layers['BatchNorm2'].beta = self.params['gamma2'], self.params['beta2']
-        self.layers['Affine1'].W, self.layers['Affine1'].b = self.params['AW1'], self.params['Ab1']
-        self.layers['Affine2'].W, self.layers['Affine2'].b = self.params['AW2'], self.params['Ab2']
-        self.layers['Affine3'].W, self.layers['Affine3'].b = self.params['AW3'], self.params['Ab3']
+        for idx in range(1, self.convLayerNum+1):
+            self.layers['Conv' + str(idx)].W, self.layers['Conv' + str(idx)].b = self.params['CW' + str(idx)], self.params['Cb' + str(idx)]
+        
+        for idx in range(1, self.affineLayerNum+1):
+            self.layers['Affine' + str(idx)].W, self.layers['Affine' + str(idx)].b = self.params['AW' + str(idx)], self.params['Ab' + str(idx)]
+        
+        for idx in range(1, self.bnLayerNum+1):
+            self.layers['BatchNorm' + str(idx)].gamma, self.layers['BatchNorm' + str(idx)].beta = self.params['gamma' + str(idx)], self.params['beta' + str(idx)]
 
     def predict(self, x, train_flg=False):
         for key, layer in self.layers.items():
@@ -742,6 +756,7 @@ class SimpleConvNet:
         
         grads['CW3'], grads['Cb3'] = self.layers['Conv3'].dW + lmd * self.layers['Conv3'].W, self.layers['Conv3'].db
         grads['CW4'], grads['Cb4'] = self.layers['Conv4'].dW + lmd * self.layers['Conv4'].W, self.layers['Conv4'].db
+        grads['CW5'], grads['Cb5'] = self.layers['Conv5'].dW + lmd * self.layers['Conv5'].W, self.layers['Conv5'].db
         grads['gamma2'], grads['beta2'] = self.layers['BatchNorm2'].dgamma, self.layers['BatchNorm2'].dbeta
         
         grads['AW1'], grads['Ab1'] = self.layers['Affine1'].dW + lmd * self.layers['Affine1'].W, self.layers['Affine1'].db
